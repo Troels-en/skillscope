@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.1] - 2026-05-18
+
+### Changed
+- Dark, dev-tool-grade report theme: refined typography, monospace numerals,
+  a single accent colour, and a brand header. No gradients, no emoji.
+
 ## [0.2.0] - 2026-05-18
 
 ### Added

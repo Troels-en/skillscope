@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 # --- constants ---------------------------------------------------------------
 
+VERSION = "0.2.1"
 # Official guideline: keep a SKILL.md body under 500 lines.
 BODY_LINE_LIMIT = 500
 # Official cap: description + when_to_use is truncated at 1536 chars in the
@@ -309,56 +310,70 @@ def build_actions(skills, collisions):
 # --- HTML rendering -----------------------------------------------------------
 
 CSS = """
-:root { --bg:#fbfbfa; --card:#fff; --ink:#1a1a1a; --mut:#6b6b6b;
-        --line:#e4e4e2; --accent:#2563eb; --warn:#b45309; --high:#b91c1c; }
+:root { --bg:#0e0e11; --card:#16161a; --card2:#1c1c22; --ink:#e8e8ea;
+        --mut:#8a8a92; --line:#26262c; --accent:#5b8cff;
+        --warn:#e0a64d; --high:#e5736b; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--ink);
-       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-.wrap { max-width:1080px; margin:0 auto; padding:40px 24px 80px; }
-h1 { font-size:24px; margin:0 0 4px; }
-.sub { color:var(--mut); margin:0 0 28px; font-size:13px; }
-.stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:28px; }
-.stat { background:var(--card); border:1px solid var(--line); border-radius:10px;
-        padding:14px 18px; min-width:120px; }
-.stat .n { font-size:22px; font-weight:600; }
-.stat .l { color:var(--mut); font-size:12px; text-transform:uppercase;
-           letter-spacing:.04em; }
-.bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden;
-       margin-top:6px; }
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+       -webkit-font-smoothing:antialiased; }
+.wrap { max-width:1060px; margin:0 auto; padding:36px 24px 90px; }
+.brand { display:flex; align-items:baseline; gap:10px; margin-bottom:22px;
+         padding-bottom:14px; border-bottom:1px solid var(--line); }
+.brand .logo { font-weight:700; letter-spacing:-.01em; }
+.brand .ver { color:var(--mut); font-size:12px;
+              font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+h1 { font-size:26px; font-weight:650; letter-spacing:-.02em; margin:0 0 4px; }
+.sub { color:var(--mut); margin:0 0 30px; font-size:13px; }
+.stats { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:24px; }
+.stat { background:var(--card); border:1px solid var(--line);
+        border-radius:12px; padding:15px 18px; min-width:118px; }
+.stat .n { font-size:24px; font-weight:650;
+           font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.stat .l { color:var(--mut); font-size:11px; text-transform:uppercase;
+           letter-spacing:.06em; margin-top:2px; }
+.bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden;
+       margin-top:8px; }
 .bar > i { display:block; height:100%; background:var(--accent); }
 .controls { display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
-input[type=search],select { font:inherit; padding:8px 12px; border-radius:8px;
-       border:1px solid var(--line); background:var(--card); }
+input[type=search],select { font:inherit; padding:9px 13px; border-radius:9px;
+       border:1px solid var(--line); background:var(--card); color:var(--ink); }
 input[type=search] { flex:1; min-width:200px; }
-h2 { font-size:14px; text-transform:uppercase; letter-spacing:.05em;
-     color:var(--mut); margin:34px 0 12px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:10px;
-        padding:16px 18px; margin-bottom:10px; }
+input[type=search]::placeholder { color:var(--mut); }
+input:focus,select:focus { outline:none; border-color:var(--accent); }
+h2 { font-size:12px; text-transform:uppercase; letter-spacing:.07em;
+     color:var(--mut); margin:36px 0 12px; font-weight:600; }
+.card { background:var(--card); border:1px solid var(--line);
+        border-radius:12px; padding:16px 18px; margin-bottom:9px; }
 .card .top { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
 .card .name { font-weight:600; font-size:15px; }
 .scope { font-size:11px; color:var(--mut); border:1px solid var(--line);
-         border-radius:5px; padding:1px 6px; }
-.desc { color:var(--ink); margin:8px 0 0; font-size:13px; }
+         border-radius:6px; padding:1px 7px; }
+.desc { color:var(--ink); margin:9px 0 0; font-size:13px; }
 .meta { color:var(--mut); font-size:12px; margin-top:8px; }
 .note { font-size:12px; margin-top:8px; color:var(--mut); }
 .trg { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
-       background:var(--bg); border:1px solid var(--line); border-radius:5px;
-       padding:1px 6px; margin:2px 4px 2px 0; display:inline-block; }
-.pill { font-size:11px; border-radius:5px; padding:1px 7px; font-weight:600; }
-.pill.warn { background:#fef3c7; color:var(--warn); }
-.pill.high { background:#fee2e2; color:var(--high); }
-.pill.ok { background:#e7f0ff; color:var(--accent); }
+       background:var(--card2); border:1px solid var(--line); border-radius:6px;
+       padding:2px 7px; margin:2px 4px 2px 0; display:inline-block; }
+.pill { font-size:10px; border-radius:5px; padding:2px 7px; font-weight:700;
+        text-transform:uppercase; letter-spacing:.04em; }
+.pill.warn { background:rgba(224,166,77,.16); color:var(--warn); }
+.pill.high { background:rgba(229,115,107,.16); color:var(--high); }
+.pill.ok { background:rgba(91,140,255,.16); color:var(--accent); }
 .w { font-size:12px; margin-top:6px; }
 .w.warn { color:var(--warn); } .w.high { color:var(--high); }
 .coll { font-size:13px; }
-.coll code { background:var(--bg); padding:1px 5px; border-radius:4px; }
-.actions .verdict { font-weight:600; font-size:15px; margin-bottom:10px; }
+.coll code { background:var(--card2); padding:2px 6px; border-radius:5px;
+             font-size:12px; }
+.actions { background:var(--card2); }
+.actions .verdict { font-weight:650; font-size:15px; margin-bottom:11px; }
 .actions ol { margin:0; padding-left:22px; }
-.actions li { margin:6px 0; font-size:13px; }
-.actions li .pill { margin-right:6px; }
-footer { color:var(--mut); font-size:12px; margin-top:50px;
-         border-top:1px solid var(--line); padding-top:16px; }
-a { color:var(--accent); }
+.actions li { margin:7px 0; font-size:13px; }
+.actions li .pill { margin-right:7px; }
+footer { color:var(--mut); font-size:12px; margin-top:54px;
+         border-top:1px solid var(--line); padding-top:18px; }
+a { color:var(--accent); text-decoration:none; }
+a:hover { text-decoration:underline; }
 """
 
 JS = """
@@ -390,6 +405,8 @@ def render_html(skills, collisions, budget, actions=None, verdict=""):
              "<meta name=viewport content='width=device-width,initial-scale=1'>",
              "<title>skillscope report</title><style>", CSS, "</style></head>",
              "<body><div class=wrap>",
+             f"<div class=brand><span class=logo>skillscope</span>"
+             f"<span class=ver>v{VERSION}</span></div>",
              "<h1>Claude Code skill overview</h1>",
              f"<p class=sub>{len(skills)} skills &middot; generated "
              f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} "
