@@ -327,7 +327,8 @@ def render_html(skills, collisions, budget):
              "<h1>Claude Code skill overview</h1>",
              f"<p class=sub>{len(skills)} skills &middot; generated "
              f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} "
-             f"by <a href='https://github.com/'>skillscope</a></p>"]
+             f"by <a href='https://github.com/Troels-en/skillscope'>"
+             f"skillscope</a></p>"]
 
     pct_real = round(budget["used_pct"])
     pct_bar = min(100, pct_real)

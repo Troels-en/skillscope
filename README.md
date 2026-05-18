@@ -6,6 +6,8 @@ A one-glance overview of your [Claude Code](https://claude.com/claude-code) skil
 plugin — and writes a single self-contained HTML report: what each skill does,
 what triggers it, how big it is, and what to watch out for.
 
+![skillscope report](docs/screenshot.png)
+
 It answers the questions you actually have once you have more than a handful of
 skills installed:
 
@@ -29,7 +31,7 @@ pile legible so you can keep it small and sharp.
 No dependencies. No install step. Just Python 3.9+.
 
 ```bash
-git clone https://github.com/<you>/skillscope.git
+git clone https://github.com/Troels-en/skillscope.git
 cd skillscope
 python3 skillscope.py --open
 ```
