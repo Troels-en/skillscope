@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.3] - 2026-05-18
+
+### Changed
+- The plugin-skill issue list is now collapsed (a muted `<details>`), so the
+  report's body matches its verdict instead of shouting un-editable findings.
+
 ## [0.2.2] - 2026-05-18
 
 ### Changed

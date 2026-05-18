@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 # --- constants ---------------------------------------------------------------
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 # Official guideline: keep a SKILL.md body under 500 lines.
 BODY_LINE_LIMIT = 500
 # Official cap: description + when_to_use is truncated at 1536 chars in the
@@ -386,6 +386,16 @@ h2 { font-size:12px; text-transform:uppercase; letter-spacing:.07em;
 .actions ol { margin:0; padding-left:22px; }
 .actions li { margin:7px 0; font-size:13px; }
 .actions li .pill { margin-right:7px; }
+.plugin-actions { margin-top:14px; border-top:1px solid var(--line);
+                  padding-top:12px; }
+.plugin-actions summary { cursor:pointer; color:var(--mut); font-size:12px;
+                          list-style:none; }
+.plugin-actions summary::-webkit-details-marker { display:none; }
+.plugin-actions summary::before { content:"\\25b8  "; }
+.plugin-actions[open] summary::before { content:"\\25be  "; }
+.plugin-actions ol { margin:11px 0 0; padding-left:22px; color:var(--mut); }
+.plugin-actions li { margin:5px 0; font-size:12px; }
+.plugin-actions li .pill { margin-right:7px; opacity:.7; }
 footer { color:var(--mut); font-size:12px; margin-top:54px;
          border-top:1px solid var(--line); padding-top:18px; }
 a { color:var(--accent); text-decoration:none; }
@@ -462,15 +472,14 @@ def render_html(skills, collisions, budget, actions=None, verdict=""):
                          f"{a['severity']}</span>{e(a['text'])}</li>")
         parts.append("</ol>")
     if plugin:
-        parts.append(f"<div class=note>{len(plugin)} issue(s) in plugin "
-                     "skills — you cannot edit those; disable unused plugins "
-                     "with <code>/plugin</code> instead. Listed for "
-                     "reference:</div>")
+        parts.append(f"<details class=plugin-actions><summary>{len(plugin)} "
+                     "issue(s) in plugin skills — not yours to edit; disable "
+                     "unused plugins with <code>/plugin</code></summary>")
         parts.append("<ol>")
         for a in plugin:
             parts.append(f"<li><span class='pill {a['severity']}'>"
                          f"{a['severity']}</span>{e(a['text'])}</li>")
-        parts.append("</ol>")
+        parts.append("</ol></details>")
     parts.append("</div>")
 
     parts.append("<div class=controls>"
