@@ -263,6 +263,49 @@ def find_collisions(skills):
     return sorted(pairs, key=lambda p: -p["score"])
 
 
+def build_actions(skills, collisions):
+    """Turn raw findings into a ranked to-do list and a one-line verdict."""
+    actions = []  # (rank, severity, text); rank 0 = high, 1 = medium
+
+    for s in skills:
+        if not s["description"]:
+            actions.append((0, "high", f"{s['name']} — add a description; "
+                            "without one Claude cannot trigger it."))
+    for c in collisions:
+        pct = int(round(c["score"] * 100))
+        if c["score"] >= 0.6:
+            actions.append((0, "high", f"Merge or cut — {c['a']} and {c['b']} "
+                            f"({pct}% description overlap)."))
+        else:
+            actions.append((1, "medium", f"Disambiguate — {c['a']} and "
+                            f"{c['b']} ({pct}% overlap); tighten one "
+                            f"description."))
+    for s in skills:
+        if s["body_lines"] > BODY_LINE_LIMIT:
+            actions.append((1, "medium", f"Trim — {s['name']} body is "
+                            f"{s['body_lines']} lines, over {BODY_LINE_LIMIT}."))
+    for s in skills:
+        if any("Broad trigger" in w[1] for w in s["warnings"]):
+            actions.append((1, "medium", f"Tighten — {s['name']} uses broad "
+                            "trigger wording; it will over-fire."))
+    for s in skills:
+        if s["desc_len"] > DESC_CHAR_CAP:
+            actions.append((1, "medium", f"Shorten — {s['name']} description "
+                            f"is {s['desc_len']} chars, over the "
+                            f"{DESC_CHAR_CAP}-char cap."))
+    actions.sort(key=lambda a: a[0])
+
+    highs = sum(1 for a in actions if a[1] == "high")
+    meds = sum(1 for a in actions if a[1] == "medium")
+    if highs:
+        verdict = f"needs attention — {highs} high, {meds} medium"
+    elif meds:
+        verdict = f"minor cleanup — {meds} item{'s' if meds != 1 else ''}"
+    else:
+        verdict = "healthy — no action needed"
+    return actions, verdict
+
+
 # --- HTML rendering -----------------------------------------------------------
 
 CSS = """
@@ -309,6 +352,10 @@ h2 { font-size:14px; text-transform:uppercase; letter-spacing:.05em;
 .w.warn { color:var(--warn); } .w.high { color:var(--high); }
 .coll { font-size:13px; }
 .coll code { background:var(--bg); padding:1px 5px; border-radius:4px; }
+.actions .verdict { font-weight:600; font-size:15px; margin-bottom:10px; }
+.actions ol { margin:0; padding-left:22px; }
+.actions li { margin:6px 0; font-size:13px; }
+.actions li .pill { margin-right:6px; }
 footer { color:var(--mut); font-size:12px; margin-top:50px;
          border-top:1px solid var(--line); padding-top:16px; }
 a { color:var(--accent); }
@@ -328,8 +375,9 @@ q.addEventListener('input',flt); sc.addEventListener('change',flt);
 """
 
 
-def render_html(skills, collisions, budget):
+def render_html(skills, collisions, budget, actions=None, verdict=""):
     e = html.escape
+    actions = actions or []
     by_scope = {"personal": [], "project": [], "plugin": []}
     for s in skills:
         by_scope.setdefault(s["scope"], []).append(s)
@@ -367,6 +415,17 @@ def render_html(skills, collisions, budget):
                  f"<div class=l>est. description budget used</div>"
                  f"<div class=bar><i style='width:{pct_bar}%{bar_style}'></i>"
                  f"</div></div>")
+    parts.append("</div>")
+
+    parts.append("<h2>Recommended actions</h2>")
+    parts.append(f"<div class='card actions'><div class=verdict>{e(verdict)}"
+                 "</div>")
+    if actions:
+        parts.append("<ol>")
+        for _rank, sev, text in actions:
+            parts.append(f"<li><span class='pill {sev}'>{sev}</span>"
+                         f"{e(text)}</li>")
+        parts.append("</ol>")
     parts.append("</div>")
 
     parts.append("<div class=controls>"
@@ -477,6 +536,7 @@ def main():
         skills.append(analyse(parsed))
 
     collisions = find_collisions(skills)
+    actions, verdict = build_actions(skills, collisions)
 
     # Budget: description text always sits in context for model-invocable
     # skills. Estimate tokens as chars/4; budget is 1% of the context window.
@@ -493,14 +553,23 @@ def main():
         "used_pct": (est_tokens / budget_tokens * 100) if budget_tokens else 0,
     }
 
-    report = render_html(skills, collisions, budget)
+    report = render_html(skills, collisions, budget, actions, verdict)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(report)
     print(f"Wrote {args.out}  ({len(skills)} skills, "
           f"{len(collisions)} collision pairs)")
 
+    print(f"\nVerdict: {verdict}")
+    for _rank, sev, text in actions[:5]:
+        print(f"  [{sev:>6}] {text}")
+    if len(actions) > 5:
+        print(f"  … {len(actions) - 5} more in the report")
+
     if args.json:
         payload = {"generated": datetime.now(timezone.utc).isoformat(),
+                   "verdict": verdict,
+                   "actions": [{"severity": sev, "text": text}
+                               for _r, sev, text in actions],
                    "budget": budget, "collisions": collisions,
                    "skills": [{k: v for k, v in s.items() if k != "path"}
                               for s in skills]}

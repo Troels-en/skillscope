@@ -118,6 +118,24 @@ class TestCollisionsAndBudget(unittest.TestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual(pairs[0]["score"], 1.0)
 
+    def test_build_actions_ranks_and_verdicts(self):
+        good = ss.analyse({"name": "good", "description": "A clear skill.",
+                           "when_to_use": "", "disable_model_invocation": False,
+                           "user_invocable": True, "allowed_tools": "",
+                           "body_lines": 20, "path": "g"})
+        actions, verdict = ss.build_actions([good], [])
+        self.assertEqual(actions, [])
+        self.assertIn("healthy", verdict)
+
+        bad = ss.analyse({"name": "bad", "description": "",
+                          "when_to_use": "", "disable_model_invocation": False,
+                          "user_invocable": True, "allowed_tools": "",
+                          "body_lines": 20, "path": "b"})
+        actions, verdict = ss.build_actions([bad], [])
+        self.assertTrue(actions)
+        self.assertEqual(actions[0][1], "high")  # high ranked first
+        self.assertIn("high", verdict)
+
     def test_html_injection_is_escaped(self):
         evil = '<script>alert("xss")</script>'
         s = ss.analyse({"name": evil, "description": evil, "when_to_use": "",

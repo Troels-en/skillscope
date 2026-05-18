@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] - 2026-05-18
+
+### Added
+- Ranked **Recommended actions** block at the top of the report — turns the
+  findings into a prioritized to-do list with a one-line verdict.
+- Terminal verdict: running the CLI now prints the verdict and top actions to
+  stdout, so you get the result without opening the HTML.
+- `verdict` and `actions` fields in the `--json` output.
+
 ## [0.1.0] - 2026-05-18
 
 ### Added
