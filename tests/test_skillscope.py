@@ -88,11 +88,12 @@ class TestAnalysis(unittest.TestCase):
         s = self._skill(description="")
         self.assertTrue(any(level == "high" for level, _ in s["warnings"]))
 
-    def test_broad_trigger_word_boundary(self):
-        # "many" must NOT trip the "any" rule.
-        s = self._skill(description="Handles many ordinary files.")
+    def test_broad_trigger_detection(self):
+        # Bare "any" is a scoped word, not a broad trigger — must NOT flag.
+        s = self._skill(description="Use for any edit under data/migrations/.")
         self.assertFalse(any("Broad trigger" in w[1] for w in s["warnings"]))
-        s2 = self._skill(description="Use for any request at any time.")
+        # Strong signals still flag.
+        s2 = self._skill(description="You must use this before any work.")
         self.assertTrue(any("Broad trigger" in w[1] for w in s2["warnings"]))
 
     def test_when_to_use_feeds_triggers(self):
@@ -127,13 +128,24 @@ class TestCollisionsAndBudget(unittest.TestCase):
         self.assertEqual(actions, [])
         self.assertIn("healthy", verdict)
 
+        # Plugin-scope problems must not count toward the verdict.
+        plug = ss.analyse({"name": "plug", "description": "",
+                           "when_to_use": "", "disable_model_invocation": False,
+                           "user_invocable": True, "allowed_tools": "",
+                           "body_lines": 20, "path": "p", "scope": "plugin"})
+        actions, verdict = ss.build_actions([plug], [])
+        self.assertEqual(len(actions), 1)
+        self.assertFalse(actions[0]["editable"])
+        self.assertIn("healthy", verdict)  # plugin issue does not move verdict
+
         bad = ss.analyse({"name": "bad", "description": "",
                           "when_to_use": "", "disable_model_invocation": False,
                           "user_invocable": True, "allowed_tools": "",
                           "body_lines": 20, "path": "b"})
         actions, verdict = ss.build_actions([bad], [])
         self.assertTrue(actions)
-        self.assertEqual(actions[0][1], "high")  # high ranked first
+        self.assertEqual(actions[0]["severity"], "high")  # high ranked first
+        self.assertTrue(actions[0]["editable"])
         self.assertIn("high", verdict)
 
     def test_html_injection_is_escaped(self):

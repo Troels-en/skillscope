@@ -21,23 +21,25 @@ from datetime import datetime, timezone
 
 # --- constants ---------------------------------------------------------------
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 # Official guideline: keep a SKILL.md body under 500 lines.
 BODY_LINE_LIMIT = 500
 # Official cap: description + when_to_use is truncated at 1536 chars in the
 # skill listing. Going over means triggers get silently cut.
 DESC_CHAR_CAP = 1536
-# Words that make a description fire very broadly — usually unintended.
-# Matched on word boundaries, so "any" does not match "many".
-AGGRESSIVE_WORDS = ("any", "every", "always", "all conversations",
-                    "before any", "must use", "starting any")
+# Strong "fires on everything" signals. Bare "any"/"every" are deliberately
+# excluded — they false-positive on scoped phrases such as "any edit under
+# data/migrations/" or "any task bigger than a bug fix", which are not broad.
+AGGRESSIVE_WORDS = ("always", "must use", "before any", "starting any",
+                    "all conversations", "every time")
 # Plugin-tree path fragments that hold duplicates or non-loaded copies.
 PLUGIN_SKIP = ("/cache/", "/.cursor/", "/.cursor-plugin/", "/.windsurf/",
                "/.codex/", "/.codex-plugin/", "/.opencode/", "/.gemini/",
                "/tests/", "/test/", "/template/", "/templates/", "/spec/",
                "/examples/", "/example/")
 # Jaccard threshold above which two descriptions are flagged as colliding.
-COLLISION_THRESHOLD = 0.18
+# Below ~0.25 it is mostly shared vocabulary, not a real trigger conflict.
+COLLISION_THRESHOLD = 0.25
 STOPWORDS = set("""a an the of to and or in on with for from by as is are be
 this that use uses used using when whenever should must do not don't user
 users claude code skill skills task tasks it its your you via per into out
@@ -265,45 +267,59 @@ def find_collisions(skills):
 
 
 def build_actions(skills, collisions):
-    """Turn raw findings into a ranked to-do list and a one-line verdict."""
-    actions = []  # (rank, severity, text); rank 0 = high, 1 = medium
+    """Turn raw findings into a ranked to-do list and a one-line verdict.
+
+    Each action is a dict with `editable` set True when it targets a personal
+    or project skill the user can change, False for plugin skills (which the
+    user cannot edit — they are managed through `/plugin`). The verdict counts
+    only editable actions, so plugin noise never inflates it.
+    """
+    scope = {s["name"]: s.get("scope", "personal") for s in skills}
+    actions = []  # dicts: rank, severity, text, editable
+
+    def add(rank, severity, text, editable):
+        actions.append({"rank": rank, "severity": severity,
+                        "text": text, "editable": editable})
 
     for s in skills:
         if not s["description"]:
-            actions.append((0, "high", f"{s['name']} — add a description; "
-                            "without one Claude cannot trigger it."))
+            add(0, "high", f"{s['name']} — add a description; without one "
+                "Claude cannot trigger it.", s.get("scope") != "plugin")
     for c in collisions:
         pct = int(round(c["score"] * 100))
+        # Editable if at least one side is yours — you can tighten that one.
+        editable = (scope.get(c["a"]) != "plugin"
+                    or scope.get(c["b"]) != "plugin")
         if c["score"] >= 0.6:
-            actions.append((0, "high", f"Merge or cut — {c['a']} and {c['b']} "
-                            f"({pct}% description overlap)."))
+            add(0, "high", f"Merge or cut — {c['a']} and {c['b']} "
+                f"({pct}% description overlap).", editable)
         else:
-            actions.append((1, "medium", f"Disambiguate — {c['a']} and "
-                            f"{c['b']} ({pct}% overlap); tighten one "
-                            f"description."))
+            add(1, "medium", f"Disambiguate — {c['a']} and {c['b']} "
+                f"({pct}% overlap); tighten one description.", editable)
     for s in skills:
         if s["body_lines"] > BODY_LINE_LIMIT:
-            actions.append((1, "medium", f"Trim — {s['name']} body is "
-                            f"{s['body_lines']} lines, over {BODY_LINE_LIMIT}."))
+            add(1, "medium", f"Trim — {s['name']} body is {s['body_lines']} "
+                f"lines, over {BODY_LINE_LIMIT}.", s.get("scope") != "plugin")
     for s in skills:
         if any("Broad trigger" in w[1] for w in s["warnings"]):
-            actions.append((1, "medium", f"Tighten — {s['name']} uses broad "
-                            "trigger wording; it will over-fire."))
+            add(1, "medium", f"Tighten — {s['name']} uses broad trigger "
+                "wording; it will over-fire.", s.get("scope") != "plugin")
     for s in skills:
         if s["desc_len"] > DESC_CHAR_CAP:
-            actions.append((1, "medium", f"Shorten — {s['name']} description "
-                            f"is {s['desc_len']} chars, over the "
-                            f"{DESC_CHAR_CAP}-char cap."))
-    actions.sort(key=lambda a: a[0])
+            add(1, "medium", f"Shorten — {s['name']} description is "
+                f"{s['desc_len']} chars, over the {DESC_CHAR_CAP}-char cap.",
+                s.get("scope") != "plugin")
+    actions.sort(key=lambda a: a["rank"])
 
-    highs = sum(1 for a in actions if a[1] == "high")
-    meds = sum(1 for a in actions if a[1] == "medium")
+    editable = [a for a in actions if a["editable"]]
+    highs = sum(1 for a in editable if a["severity"] == "high")
+    meds = sum(1 for a in editable if a["severity"] == "medium")
     if highs:
         verdict = f"needs attention — {highs} high, {meds} medium"
     elif meds:
         verdict = f"minor cleanup — {meds} item{'s' if meds != 1 else ''}"
     else:
-        verdict = "healthy — no action needed"
+        verdict = "your skills are healthy — no action needed"
     return actions, verdict
 
 
@@ -434,14 +450,26 @@ def render_html(skills, collisions, budget, actions=None, verdict=""):
                  f"</div></div>")
     parts.append("</div>")
 
+    editable = [a for a in actions if a["editable"]]
+    plugin = [a for a in actions if not a["editable"]]
     parts.append("<h2>Recommended actions</h2>")
     parts.append(f"<div class='card actions'><div class=verdict>{e(verdict)}"
                  "</div>")
-    if actions:
+    if editable:
         parts.append("<ol>")
-        for _rank, sev, text in actions:
-            parts.append(f"<li><span class='pill {sev}'>{sev}</span>"
-                         f"{e(text)}</li>")
+        for a in editable:
+            parts.append(f"<li><span class='pill {a['severity']}'>"
+                         f"{a['severity']}</span>{e(a['text'])}</li>")
+        parts.append("</ol>")
+    if plugin:
+        parts.append(f"<div class=note>{len(plugin)} issue(s) in plugin "
+                     "skills — you cannot edit those; disable unused plugins "
+                     "with <code>/plugin</code> instead. Listed for "
+                     "reference:</div>")
+        parts.append("<ol>")
+        for a in plugin:
+            parts.append(f"<li><span class='pill {a['severity']}'>"
+                         f"{a['severity']}</span>{e(a['text'])}</li>")
         parts.append("</ol>")
     parts.append("</div>")
 
@@ -576,17 +604,22 @@ def main():
     print(f"Wrote {args.out}  ({len(skills)} skills, "
           f"{len(collisions)} collision pairs)")
 
+    editable = [a for a in actions if a["editable"]]
+    plugin = [a for a in actions if not a["editable"]]
     print(f"\nVerdict: {verdict}")
-    for _rank, sev, text in actions[:5]:
-        print(f"  [{sev:>6}] {text}")
-    if len(actions) > 5:
-        print(f"  … {len(actions) - 5} more in the report")
+    for a in editable[:5]:
+        print(f"  [{a['severity']:>6}] {a['text']}")
+    if len(editable) > 5:
+        print(f"  … {len(editable) - 5} more in the report")
+    if plugin:
+        print(f"  ({len(plugin)} issue(s) in plugin skills — not yours to "
+              f"edit; see the report)")
 
     if args.json:
         payload = {"generated": datetime.now(timezone.utc).isoformat(),
                    "verdict": verdict,
-                   "actions": [{"severity": sev, "text": text}
-                               for _r, sev, text in actions],
+                   "actions": [{"severity": a["severity"], "text": a["text"],
+                                "editable": a["editable"]} for a in actions],
                    "budget": budget, "collisions": collisions,
                    "skills": [{k: v for k, v in s.items() if k != "path"}
                               for s in skills]}
