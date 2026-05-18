@@ -148,6 +148,16 @@ class TestCollisionsAndBudget(unittest.TestCase):
         self.assertTrue(actions[0]["editable"])
         self.assertIn("high", verdict)
 
+    def test_plugin_card_has_no_alarm_pill(self):
+        plug = ss.analyse({"name": "mathy", "description": "",
+                           "when_to_use": "", "disable_model_invocation": False,
+                           "user_invocable": True, "allowed_tools": "",
+                           "body_lines": 20, "path": "p", "scope": "plugin",
+                           "origin": "official"})
+        html = ss.render_html([plug], [], {"used_pct": 5})
+        # the plugin card carries its warning, but no alarm headline
+        self.assertNotIn("needs attention", html)
+
     def test_html_injection_is_escaped(self):
         evil = '<script>alert("xss")</script>'
         s = ss.analyse({"name": evil, "description": evil, "when_to_use": "",

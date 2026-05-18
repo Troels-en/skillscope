@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 # --- constants ---------------------------------------------------------------
 
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 # Official guideline: keep a SKILL.md body under 500 lines.
 BODY_LINE_LIMIT = 500
 # Official cap: description + when_to_use is truncated at 1536 chars in the
@@ -529,12 +529,17 @@ def _render_card(s, e):
     search = (s["name"] + " " + s.get("trigger_text", s["description"])).lower()
     out = [f"<div class=card data-scope=\"{e(s['scope'])}\" "
            f"data-search=\"{e(search)}\">"]
-    out.append("<div class=top>"
-               f"<span class=name>{e(s['name'])}</span>"
-               f"<span class=scope>{e(s['scope'])}"
-               + (f": {e(s['origin'])}" if s.get("origin") else "")
-               + "</span>"
-               f"<span class='pill {sev}'>{label}</span></div>")
+    top = ("<div class=top>"
+           f"<span class=name>{e(s['name'])}</span>"
+           f"<span class=scope>{e(s['scope'])}"
+           + (f": {e(s['origin'])}" if s.get("origin") else "")
+           + "</span>")
+    # A status pill only on skills the user can act on. Plugin skills still
+    # show informational warnings inside the card, but no alarm headline —
+    # there is nothing for the user to fix in a plugin skill.
+    if s["scope"] != "plugin":
+        top += f"<span class='pill {sev}'>{label}</span>"
+    out.append(top + "</div>")
     desc = s["description"] or "(no description)"
     if len(desc) > 320:
         desc = desc[:320] + "…"

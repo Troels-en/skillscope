@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.4] - 2026-05-18
+
+### Changed
+- Plugin-skill cards no longer show an alarm status pill ("needs attention").
+  A plugin skill's problems are not the user's to fix, so the card carries its
+  warnings as information only — consistent with the action list.
+
 ## [0.2.3] - 2026-05-18
 
 ### Changed
