@@ -17,5 +17,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Run tests
         run: python -W error::ResourceWarning -m unittest discover -s tests -v
-      - name: Smoke test the CLI
-        run: python skillscope.py --out /tmp/report.html
+      - name: Smoke test the CLI against a fixture
+        run: |
+          mkdir -p ci-fixture/.claude/skills/sample
+          printf -- '---\nname: sample\ndescription: A sample skill used to smoke-test the CLI.\n---\nBody.\n' \
+            > ci-fixture/.claude/skills/sample/SKILL.md
+          python skillscope.py --project ci-fixture --out /tmp/report.html
+          test -s /tmp/report.html
