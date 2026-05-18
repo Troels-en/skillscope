@@ -27,7 +27,8 @@ BODY_LINE_LIMIT = 500
 # skill listing. Going over means triggers get silently cut.
 DESC_CHAR_CAP = 1536
 # Words that make a description fire very broadly — usually unintended.
-AGGRESSIVE_WORDS = ("any ", "every ", "always", "all conversation",
+# Matched on word boundaries, so "any" does not match "many".
+AGGRESSIVE_WORDS = ("any", "every", "always", "all conversations",
                     "before any", "must use", "starting any")
 # Plugin-tree path fragments that hold duplicates or non-loaded copies.
 PLUGIN_SKIP = ("/cache/", "/.cursor/", "/.cursor-plugin/", "/.windsurf/",
@@ -51,7 +52,8 @@ less etc eg ie if else while case cases work works working run runs running
 def parse_skill(path):
     """Return a dict describing one SKILL.md, or None if unreadable."""
     try:
-        text = open(path, encoding="utf-8", errors="ignore").read()
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            text = fh.read()
     except OSError:
         return None
 
@@ -63,7 +65,7 @@ def parse_skill(path):
     name = fields.get("name") or os.path.basename(os.path.dirname(path))
     desc = fields.get("description", "").strip()
     when = fields.get("when_to_use", "").strip()
-    body_lines = body.count("\n") + 1 if body.strip() else 0
+    body_lines = len(body.splitlines()) if body.strip() else 0
 
     return {
         "name": name,
@@ -86,7 +88,7 @@ def _parse_frontmatter(front):
     i = 0
     while i < len(lines):
         line = lines[i]
-        km = re.match(r"^([A-Za-z_-]+):\s*(.*)$", line)
+        km = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", line)
         if not km:
             i += 1
             continue
@@ -113,14 +115,23 @@ def discover(project_dir):
     """Find all SKILL.md files across personal, project, and plugin scopes."""
     home = os.path.expanduser("~")
     found = []
+    seen = set()  # realpaths — a dir reachable from two scopes counts once
+
+    def add(scope, origin, path):
+        rp = os.path.realpath(path)
+        if rp in seen:
+            return
+        seen.add(rp)
+        found.append((scope, origin, path))
 
     personal = os.path.join(home, ".claude", "skills")
     for p in _skill_files(personal):
-        found.append(("personal", "", p))
+        add("personal", "", p)
 
     proj = os.path.join(project_dir, ".claude", "skills")
+    proj_origin = os.path.basename(os.path.abspath(project_dir))
     for p in _skill_files(proj):
-        found.append(("project", os.path.basename(os.path.abspath(project_dir)), p))
+        add("project", proj_origin, p)
 
     plugins_root = os.path.join(home, ".claude", "plugins", "marketplaces")
     seen_plugin = set()
@@ -135,7 +146,7 @@ def discover(project_dir):
         if key in seen_plugin:  # dedupe repeated marketplace copies
             continue
         seen_plugin.add(key)
-        found.append(("plugin", plugin_name, p))
+        add("plugin", plugin_name, p)
     return found
 
 
@@ -185,7 +196,11 @@ def analyse(skill):
     """Attach warnings + a plain-language note to one skill dict."""
     warnings = []
     desc = skill["description"]
-    desc_len = len(desc) + len(skill["when_to_use"])
+    when = skill["when_to_use"]
+    # when_to_use is appended to the description in the real skill listing,
+    # so treat the two as one block for every analysis below.
+    trigger_text = (desc + "\n" + when).strip()
+    desc_len = len(desc) + len(when)
 
     if not desc:
         warnings.append(("high", "No description — Claude cannot know when to "
@@ -198,14 +213,16 @@ def analyse(skill):
         warnings.append(("warn", f"Description is {desc_len} chars, over the "
                                  f"{DESC_CHAR_CAP}-char cap — the tail gets "
                                  f"truncated and may lose trigger keywords."))
-    low = desc.lower()
-    hit = [w.strip() for w in AGGRESSIVE_WORDS if w in low]
+    low = trigger_text.lower()
+    hit = [w for w in AGGRESSIVE_WORDS
+           if re.search(r"\b" + re.escape(w) + r"\b", low)]
     if hit:
         warnings.append(("warn", "Broad trigger wording (" + ", ".join(hit)
                          + ") — expect this to fire on many unrelated prompts."))
 
-    skill["triggers"] = extract_triggers(desc)
-    skill["non_triggers"] = extract_non_triggers(desc)
+    skill["trigger_text"] = trigger_text
+    skill["triggers"] = extract_triggers(trigger_text)
+    skill["non_triggers"] = extract_non_triggers(trigger_text)
     skill["desc_len"] = desc_len
     skill["warnings"] = warnings
 
@@ -228,7 +245,8 @@ def analyse(skill):
 
 def find_collisions(skills):
     """Return description-overlap pairs above the Jaccard threshold."""
-    toks = [(s["name"], tokenize(s["description"])) for s in skills]
+    toks = [(s["name"], tokenize(s.get("trigger_text", s["description"])))
+            for s in skills]
     pairs = []
     for i in range(len(toks)):
         for j in range(i + 1, len(toks)):
@@ -395,8 +413,8 @@ def _render_card(s, e):
           "warn" if s["warnings"] else "ok")
     label = {"high": "needs attention", "warn": "review",
              "ok": "healthy"}[sev]
-    search = (s["name"] + " " + s["description"]).lower()
-    out = [f"<div class=card data-scope={e(s['scope'])} "
+    search = (s["name"] + " " + s.get("trigger_text", s["description"])).lower()
+    out = [f"<div class=card data-scope=\"{e(s['scope'])}\" "
            f"data-search=\"{e(search)}\">"]
     out.append("<div class=top>"
                f"<span class=name>{e(s['name'])}</span>"
@@ -440,6 +458,8 @@ def main():
     ap.add_argument("--open", action="store_true",
                     help="open the report in your browser when done")
     args = ap.parse_args()
+    if args.context_window <= 0:
+        ap.error("--context-window must be a positive number of tokens")
 
     located = discover(args.project)
     if not located:
@@ -460,7 +480,9 @@ def main():
 
     # Budget: description text always sits in context for model-invocable
     # skills. Estimate tokens as chars/4; budget is 1% of the context window.
-    desc_chars = sum(s["desc_len"] for s in skills
+    # Each skill contributes at most DESC_CHAR_CAP to the listing — anything
+    # past the cap is truncated and never reaches context.
+    desc_chars = sum(min(s["desc_len"], DESC_CHAR_CAP) for s in skills
                      if not s["disable_model_invocation"])
     est_tokens = desc_chars / 4
     budget_tokens = args.context_window * 0.01

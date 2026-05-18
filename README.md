@@ -28,12 +28,21 @@ pile legible so you can keep it small and sharp.
 
 ## Install
 
-No dependencies. No install step. Just Python 3.9+.
+No runtime dependencies — just Python 3.9+.
+
+**Run it without installing:**
 
 ```bash
 git clone https://github.com/Troels-en/skillscope.git
 cd skillscope
 python3 skillscope.py --open
+```
+
+**Or install it as a command** with [pipx](https://pipx.pypa.io/):
+
+```bash
+pipx install git+https://github.com/Troels-en/skillscope.git
+skillscope --open
 ```
 
 ## Usage
