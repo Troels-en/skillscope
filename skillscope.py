@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 # --- constants ---------------------------------------------------------------
 
-VERSION = "0.2.4"
+VERSION = "0.2.5"
 # Official guideline: keep a SKILL.md body under 500 lines.
 BODY_LINE_LIMIT = 500
 # Official cap: description + when_to_use is truncated at 1536 chars in the
@@ -32,11 +32,6 @@ DESC_CHAR_CAP = 1536
 # data/migrations/" or "any task bigger than a bug fix", which are not broad.
 AGGRESSIVE_WORDS = ("always", "must use", "before any", "starting any",
                     "all conversations", "every time")
-# Plugin-tree path fragments that hold duplicates or non-loaded copies.
-PLUGIN_SKIP = ("/cache/", "/.cursor/", "/.cursor-plugin/", "/.windsurf/",
-               "/.codex/", "/.codex-plugin/", "/.opencode/", "/.gemini/",
-               "/tests/", "/test/", "/template/", "/templates/", "/spec/",
-               "/examples/", "/example/")
 # Jaccard threshold above which two descriptions are flagged as colliding.
 # Below ~0.25 it is mostly shared vocabulary, not a real trigger conflict.
 COLLISION_THRESHOLD = 0.25
@@ -136,20 +131,22 @@ def discover(project_dir):
     for p in _skill_files(proj):
         add("project", proj_origin, p)
 
-    plugins_root = os.path.join(home, ".claude", "plugins", "marketplaces")
-    seen_plugin = set()
-    for p in _skill_files(plugins_root):
-        norm = p.replace(os.sep, "/")
-        if any(frag in norm for frag in PLUGIN_SKIP):
-            continue
-        skill_name = os.path.basename(os.path.dirname(p))
-        rel = os.path.relpath(p, plugins_root)
-        plugin_name = rel.split(os.sep)[0]
-        key = (plugin_name, skill_name)
-        if key in seen_plugin:  # dedupe repeated marketplace copies
-            continue
-        seen_plugin.add(key)
-        add("plugin", plugin_name, p)
+    # Plugin skills come ONLY from installed plugins, read from the install
+    # manifest. Scanning the marketplaces/ catalogue instead would report
+    # plugins that are merely available but never installed or loaded.
+    manifest = os.path.join(home, ".claude", "plugins",
+                            "installed_plugins.json")
+    if os.path.isfile(manifest):
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            data = {}
+        for key, records in (data.get("plugins") or {}).items():
+            plugin_name = key.split("@")[0]
+            for rec in records:
+                for sp in _plugin_skill_files(rec.get("installPath", "")):
+                    add("plugin", plugin_name, sp)  # add() de-dups by realpath
     return found
 
 
@@ -161,6 +158,28 @@ def _skill_files(root):
         if "SKILL.md" in files:
             out.append(os.path.join(dirpath, "SKILL.md"))
     return sorted(out)
+
+
+def _plugin_skill_files(install_path):
+    """SKILL.md files for one installed plugin.
+
+    Looks only at the canonical `skills/` subdirectory (one level deep), plus a
+    root SKILL.md for single-skill plugins. This deliberately avoids editor
+    mirrors (.cursor/, .windsurf/) and old-layout duplicate copies.
+    """
+    if not install_path or not os.path.isdir(install_path):
+        return []
+    out = []
+    skills_dir = os.path.join(install_path, "skills")
+    if os.path.isdir(skills_dir):
+        for name in sorted(os.listdir(skills_dir)):
+            sp = os.path.join(skills_dir, name, "SKILL.md")
+            if os.path.isfile(sp):
+                out.append(sp)
+    root = os.path.join(install_path, "SKILL.md")
+    if os.path.isfile(root):
+        out.append(root)
+    return out
 
 
 # --- analysis -----------------------------------------------------------------

@@ -70,6 +70,17 @@ class TestParsing(unittest.TestCase):
         s = ss.parse_skill(p)
         self.assertTrue(s["disable_model_invocation"])
 
+    def test_plugin_skill_files_scans_skills_dir_only(self):
+        root = os.path.join(self.tmp, "myplugin")
+        for sub in (("skills", "alpha"), (".cursor", "skills", "beta")):
+            d = os.path.join(root, *sub)
+            os.makedirs(d)
+            open(os.path.join(d, "SKILL.md"), "w").close()
+        found = ss._plugin_skill_files(root)
+        # only skills/alpha — the .cursor editor mirror is ignored
+        self.assertEqual(len(found), 1)
+        self.assertIn(os.path.join("skills", "alpha"), found[0])
+
 
 class TestAnalysis(unittest.TestCase):
 

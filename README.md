@@ -92,9 +92,9 @@ file. Nothing is sent anywhere. No network calls. No API key. No LLM.
 - The budget figure is an estimate (description characters ÷ 4 vs 1% of the
   context window), not Claude Code's exact accounting. Run `/doctor` in Claude
   Code for the authoritative budget status.
-- Plugin skills are de-duplicated by name; cached and editor-specific copies
-  (`.cursor`, `.windsurf`, …) are skipped. The plugin count is a close
-  approximation of what loads, not a guarantee.
+- Plugin skills are read from the install manifest, so only installed plugins
+  are scanned — plugins merely available in a registered marketplace are not
+  counted. If the manifest is missing, no plugin skills are reported.
 - Analysis is rule-based — it reads structure, not meaning. A skill it marks
   "healthy" can still be badly written.
 

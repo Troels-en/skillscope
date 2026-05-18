@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.5] - 2026-05-18
+
+### Fixed
+- Plugin skills are now read from the install manifest
+  (`installed_plugins.json`) — only plugins that are actually installed are
+  scanned. Earlier versions walked the whole `marketplaces/` catalogue and
+  reported skills from plugins that were merely available, never installed or
+  loaded (e.g. every skill in a registered-but-unused marketplace). This was a
+  large over-count.
+
 ## [0.2.4] - 2026-05-18
 
 ### Changed
